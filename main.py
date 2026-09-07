@@ -8,7 +8,7 @@ TOKEN = os.getenv("TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 # FILE BUAT NYIMPEN MEMORY TIAP CLIENT
 MEMORY_FILE = "memory.json"

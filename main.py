@@ -1,6 +1,5 @@
 import os
 import json
-import pandas as pd
 import google.generativeai as genai
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
@@ -28,9 +27,9 @@ def save_memory(data):
 HERMES_PROMPT = """
 KAMU ADALAH SMM AGENCY AI. Nama kamu "SMM".
 TUGAS: Jadi SMM, Scriptwriter, Copywriter, Data Analyst untuk client.
-GAYA: Profesional, santai, to the point, pake emoji dan poin.
+GAYA: Profesional, santai, to the point, pake emoji dan poin. Jangan kepanjangan.
 DATA CLIENT: {brand_info}
-ATURAN: Ingat nama brand client. Jawab sesuai konteks chat sebelumnya. Kalau diminta bikin tabel/plan bilang "mau aku kirim ke excel?"
+ATURAN: Ingat nama brand client. Jawab sesuai konteks chat sebelumnya. Kalau diminta bikin plan/table, format pake poin biar rapi.
 """
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -58,7 +57,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"2. **Caption & Hook** - 'Bikinin 10 hook viral kopi 18rb'\n"
             f"3. **Script Video** - 'Bikin script reel 15 detik'\n"
             f"4. **Analisa** - Kirim aja link postingan kamu\n"
-            f"5. **Export Excel** - 'Kirim ke excel ya'\n\n"
+            f"5. **Export** - 'Kirim ke text rapi ya'\n\n"
             f"Langsung spill aja mau dibikinin apa 😁"
         )
     await update.message.reply_text(text)
@@ -101,11 +100,9 @@ async def hermes_brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = model.generate_content(full_prompt)
         bot_reply = response.text
         
-        # CEK KALAU MINTA EXCEL
-        if "excel" in user_msg.lower() or "xlsx" in user_msg.lower() or "export" in user_msg.lower():
-            df = pd.DataFrame({"Ide Konten Dari SMM AI": [bot_reply]})
-            df.to_excel("content_plan.xlsx", index=False)
-            await update.message.reply_document(document=open("content_plan.xlsx", "rb"), caption=f"Ini content plan untuk {brand_info} ya ✨")
+        # KALAU MINTA EXPORT
+        if "excel" in user_msg.lower() or "export" in user_msg.lower() or "text rapi" in user_msg.lower():
+            await update.message.reply_text(f"**Content Plan untuk {brand_info}:**\n\n{bot_reply}\n\n_Tinggal copy paste ke Google Sheet ya ✨_")
         else:
             await update.message.reply_text(bot_reply)
             

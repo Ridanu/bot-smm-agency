@@ -11,7 +11,6 @@ genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
 MEMORY_FILE = "memory.json"
-MENUNGGU_ISI_FORM = 1
 
 def load_memory():
     try:
@@ -50,7 +49,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = f"Hai {brand} Balik lagi ya \nKetik /setbrand kalau mau update data brand"
     await update.message.reply_text(text)
 
-async def setbrand_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def setbrand(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    context.user_data[user_id] = "nunggu_form" # tandai lagi nunggu isi form
+    
     text = (
         "Set Brand :\n"
         "Nama Brand :\n"
@@ -61,57 +63,59 @@ async def setbrand_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Silakan isi semua di atas dan kirim sekaligus ya"
     )
     await update.message.reply_text(text)
-    return MENUNGGU_ISI_FORM
 
-async def terima_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    teks = update.message.text.split("\n")
-
-    data = {}
-    for baris in teks:
-        if "Nama Brand" in baris:
-            data["brand"] = baris.split(":")[1].strip()
-        if "Niche" in baris:
-            data["niche"] = baris.split(":")[1].strip()
-        if "Produk" in baris:
-            data["produk"] = baris.split(":")[1].strip()
-        if "Target" in baris:
-            data["target"] = baris.split(":")[1].strip()
-        if "Tone" in baris:
-            data["tone"] = baris.split(":")[1].strip()
-
-    data["history"] = []
-
-    memory = load_memory()
-    memory[user_id] = data
-    save_memory(memory)
-
-    text = (
-        f"Siap Aku udah inget brand kamu: {data['brand']} \n\n"
-        f"Detail Brand:\n"
-        f"Nama: {data['brand']}\n"
-        f"Niche: {data['niche']}\n"
-        f"Produk: {data['produk']}\n"
-        f"Target: {data['target']}\n"
-        f"Tone: {data['tone']}\n\n"
-        f"Sekarang kita bisa mulai ya \n\n"
-        f"Ini yang bisa aku lakuin buat kamu:\n"
-        f"1. Bikinin Content Plan 30 Hari\n"
-        f"2. Bikinin 10 Hook dan Caption Viral\n"
-        f"3. Bikin Script Reel Tiktok 15 detik\n"
-        f"4. Bikinin Ide Giveaway dan Campaign\n"
-        f"5. Analisa Kompetitor\n"
-        f"6. Kirim ke text rapi\n"
-        f"Langsung spill aja mau dibikinin apa"
-    )
-    await update.message.reply_text(text)
-    return ConversationHandler.END
-
-async def hermes_brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def terima_pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     user_msg = update.message.text
     memory = load_memory()
 
+    # CEK APA LAGI NUNGGU ISI FORM
+    if context.user_data.get(user_id) == "nunggu_form":
+        teks = user_msg.split("\n")
+        data = {}
+        for baris in teks:
+            if "Nama Brand" in baris:
+                data["brand"] = baris.split(":")[1].strip()
+            if "Niche" in baris:
+                data["niche"] = baris.split(":")[1].strip()
+            if "Produk" in baris:
+                data["produk"] = baris.split(":")[1].strip()
+            if "Target" in baris:
+                data["target"] = baris.split(":")[1].strip()
+            if "Tone" in baris:
+                data["tone"] = baris.split(":")[1].strip()
+
+        if "brand" in data:
+            data["history"] = []
+            memory[user_id] = data
+            save_memory(memory)
+            context.user_data[user_id] = "selesai"
+
+            text = (
+                f"Siap Aku udah inget brand kamu: {data['brand']} \n\n"
+                f"Detail Brand:\n"
+                f"Nama: {data['brand']}\n"
+                f"Niche: {data['niche']}\n"
+                f"Produk: {data['produk']}\n"
+                f"Target: {data['target']}\n"
+                f"Tone: {data['tone']}\n\n"
+                f"Sekarang kita bisa mulai ya \n\n"
+                f"Ini yang bisa aku lakuin buat kamu:\n"
+                f"1. Bikinin Content Plan 30 Hari\n"
+                f"2. Bikinin 10 Hook dan Caption Viral\n"
+                f"3. Bikin Script Reel Tiktok 15 detik\n"
+                f"4. Bikinin Ide Giveaway dan Campaign\n"
+                f"5. Analisa Kompetitor\n"
+                f"6. Kirim ke text rapi\n"
+                f"Langsung spill aja mau dibikinin apa"
+            )
+            await update.message.reply_text(text)
+            return
+        else:
+            await update.message.reply_text("Formatnya belum bener kak. Copy form dari atas lalu isi ya")
+            return
+
+    # KALAU BUKAN LAGI ISI FORM, BERARTI CHAT BIASA KE GEMINI
     if user_id not in memory:
         await update.message.reply_text("Kita setup brand dulu ya. Ketik /setbrand")
         return
@@ -141,17 +145,9 @@ async def hermes_brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 app = ApplicationBuilder().token(TOKEN).build()
 
-conv_handler = ConversationHandler(
-    entry_points=[CommandHandler('setbrand', setbrand_start)],
-    states={
-        MENUNGGU_ISI_FORM: [MessageHandler(filters.TEXT & ~filters.COMMAND, terima_form)],
-    },
-    fallbacks=[]
-)
-
 app.add_handler(CommandHandler("start", start))
-app.add_handler(conv_handler)
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, hermes_brain))
+app.add_handler(CommandHandler("setbrand", setbrand))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, terima_pesan))
 
 print("Bot SMM Agency is running...")
 app.run_polling()

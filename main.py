@@ -23,13 +23,27 @@ def save_memory(data):
     with open(MEMORY_FILE, "w") as f:
         json.dump(data, f)
 
+# 1. UBAH SYSTEM PROMPT BIAR LOCKED 5 MENU SAJA
 HERMES_PROMPT = """
-Kamu adalah SMM Agency AI. Nama kamu SMM.
-Tugas: Jadi SMM, Copywriter, Scriptwriter, dan Strategist untuk client.
-Gaya: Santai, profesional, to the point, pakai emoji dan poin. Bahasa Indonesia.
-JANGAN PERNAH GUNAKAN TANDA BINTANG ** DI JAWABAN.
-Data Brand Client: {brand_info}
-Aturan: Ingat data brand dan riwayat chat. Jawab sesuai konteks.
+Kamu adalah SMM Agency AI bernama SMM. Spesialismu hanya 5 hal untuk brand client.
+
+5 TUGAS UTAMA KAMU:
+1. Bikinin Content Plan 30 Hari
+2. Bikinin 10 Hook dan Caption Viral
+3. Bikin Script Reel Tiktok 15 detik
+4. Bikinin Ide Giveaway dan Campaign
+5. Analisa Kompetitor
+
+ATURAN KERAS YANG WAJIB DIINGAT:
+- Data Brand Client: {brand_info}
+- Gaya: Santai, profesional, to the point, pakai emoji dan poin. Bahasa Indonesia.
+- JANGAN PERNAH GUNAKAN TANDA BINTANG ** DI JAWABAN.
+- JIKA USER BERTANYA DI LUAR 5 HAL DI ATAS, KAMU WAJIB MENOLAK.
+- Jawaban penolakan: "Maaf kak, aku spesialis SMM untuk {brand_name} aja ya 🙏 Mau aku bikinin konten tentang itu?"
+- Dilarang jawab: resep, harga bahan, cara buka usaha, teknis, atau hal diluar marketing.
+- Ingat data brand dan riwayat chat. Jawab sesuai konteks Kopi Senja.
+
+RIWAYAT CHAT: {history}
 """
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,13 +60,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         brand = memory[user_id]["brand"]
-        text = f"Hai {brand} Balik lagi ya \nKetik /setbrand kalau mau update data brand"
+        text = f"Hai {brand} Balik lagi ya \nKetik /setbrand kalau mau update data brand\nMenu aku:\n1. Content Plan\n2. Hook + Caption\n3. Script Reels\n4. Giveaway\n5. Analisa Kompetitor"
     await update.message.reply_text(text)
 
 async def setbrand(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    context.user_data[user_id] = "nunggu_form" # tandai lagi nunggu isi form
-    
+    context.user_data[user_id] = "nunggu_form"
+
     text = (
         "Set Brand :\n"
         "Nama Brand :\n"
@@ -106,7 +120,6 @@ async def terima_pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"3. Bikin Script Reel Tiktok 15 detik\n"
                 f"4. Bikinin Ide Giveaway dan Campaign\n"
                 f"5. Analisa Kompetitor\n"
-                f"6. Kirim ke text rapi\n"
                 f"Langsung spill aja mau dibikinin apa"
             )
             await update.message.reply_text(text)
@@ -122,7 +135,8 @@ async def terima_pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     brand_data = memory[user_id]
     brand_info = f"Brand: {brand_data['brand']}, Niche: {brand_data['niche']}, Produk: {brand_data['produk']}, Target: {brand_data['target']}, Tone: {brand_data['tone']}"
-    history = brand_data["history"]
+    brand_name = brand_data['brand']
+    history = brand_data.get("history", [])
 
     history.append({"role": "user", "text": user_msg})
     memory[user_id]["history"] = history[-10:]
@@ -131,17 +145,24 @@ async def terima_pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
 
     try:
-        full_prompt = HERMES_PROMPT.format(brand_info=brand_info) + f"\n\nRIWAYAT CHAT: {history}\n\nPERTANYAAN: {user_msg}"
+        # 2. MASUKIN HISTORY DAN BRAND_NAME KE PROMPT
+        history_str = json.dumps(history, ensure_ascii=False)
+        full_prompt = HERMES_PROMPT.format(brand_info=brand_info, brand_name=brand_name, history=history_str) + f"\n\nPERTANYAAN TERBARU: {user_msg}"
+
         response = model.generate_content(full_prompt)
         bot_reply = response.text
 
         await update.message.reply_text(bot_reply)
 
         memory[user_id]["history"].append({"role": "bot", "text": bot_reply})
+        memory[user_id]["history"] = memory[user_id]["history"][-10:]
         save_memory(memory)
 
     except Exception as e:
-        await update.message.reply_text(f"Maaf ada error: {e}")
+        if "429" in str(e):
+            await update.message.reply_text("Lagi kena limit dari Google AI kak. Tunggu 1 menit ya 🙏")
+        else:
+            await update.message.reply_text(f"Maaf ada error: {e}")
 
 app = ApplicationBuilder().token(TOKEN).build()
 
